@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FSH Predict — AI Match Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0A0F1C; --surface:#101828; --surface2:#152036;
+    --border:rgba(148,163,184,.14); --text:#E7EDF6; --dim:#8B99B0; --faint:#5B6980;
+    --gold:#E3B23C; --green:#2FC966; --amber:#F0B429; --red:#F0503C; --live:#FF4D4D;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding:16px 16px 48px}
+  .disp{font-family:'Barlow Condensed',sans-serif}
+  header .brand{font-weight:700;font-size:26px;letter-spacing:1px}
+  header .brand span{color:var(--gold)}
+  header .sub{font-size:10.5px;color:var(--faint);letter-spacing:2px;text-transform:uppercase}
+  .hdr-row{display:flex;justify-content:space-between;align-items:center}
+  .live-ind{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--live)}
+  .dot{position:relative;width:8px;height:8px;display:inline-flex}
+  .dot::before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--live);animation:pulse 1.6s ease-out infinite}
+  .dot::after{content:"";position:relative;width:8px;height:8px;border-radius:50%;background:var(--live)}
+  @keyframes pulse{to{transform:scale(2.6);opacity:0}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  nav{display:flex;gap:4px;overflow-x:auto;margin-top:16px;border-bottom:1px solid var(--border);scrollbar-width:none}
+  nav::-webkit-scrollbar{display:none}
+  nav button{padding:10px 13px;background:none;border:none;border-bottom:2px solid transparent;color:var(--dim);
+    font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:15.5px;letter-spacing:.8px;text-transform:uppercase;
+    cursor:pointer;white-space:nowrap;flex-shrink:0}
+  nav button.on{color:var(--text);border-bottom-color:var(--gold)}
+  nav button:focus-visible,select:focus,input:focus,.chip:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:8px}
+  .stitle{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:18px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--dim);margin:18px 2px 10px}
+  .badge{font-size:10px;font-weight:700;letter-spacing:1.2px;padding:3px 8px;border-radius:4px;text-transform:uppercase;
+    color:var(--dim);background:rgba(148,163,184,.10);white-space:nowrap}
+  .badge.green{color:var(--green);background:rgba(47,201,102,.12)}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 10px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:none;color:var(--dim);
+    font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;font-family:'Inter',sans-serif}
+  .chip.on{border-color:var(--gold);background:rgba(227,178,60,.12);color:var(--gold)}
+
+  .pct{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;line-height:1;letter-spacing:.5px}
+  .meter{display:flex;gap:2px;margin-top:3px;justify-content:flex-end}
+  .meter i{width:8px;height:3px;border-radius:2px;background:rgba(148,163,184,.18)}
+  .probwrap{display:flex;flex-direction:column;align-items:flex-end;min-width:52px}
+
+  .msg{text-align:center;color:var(--dim);font-size:13px;padding:26px 14px}
+  .spin{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;
+    margin:0 auto 12px;animation:rot .8s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  .row{display:flex;justify-content:space-between;align-items:center}
+  .team{font-family:'Barlow Condensed',sans-serif;font-weight:600;font-size:18px}
+  .logo{width:22px;height:22px;object-fit:contain;vertical-align:-5px;margin-right:8px}
+  .score{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:28px;color:var(--gold);letter-spacing:2px;padding:0 14px}
+  .ko{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:20px;color:var(--gold);text-align:center}
+  .kol{font-size:10px;color:var(--faint);letter-spacing:1px;text-align:center}
+  .bar{height:6px;border-radius:3px;background:rgba(148,163,184,.12);overflow:hidden;flex:1.4}
+  .bar i{display:block;height:100%;border-radius:3px;transition:width .6s ease}
+
+  input[type=text]{width:100%;padding:11px 12px;border-radius:10px;background:var(--surface2);
+    border:1px solid var(--border);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
+  .results{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-top:6px;max-height:190px;overflow-y:auto}
+  .results div{padding:10px 12px;font-size:13.5px;cursor:pointer;border-bottom:1px solid var(--border)}
+  .results div:hover{background:rgba(227,178,60,.08)}
+  .btn{width:100%;padding:13px;border-radius:10px;border:none;background:var(--gold);color:#0A0F1C;
+    font-weight:700;font-size:14.5px;cursor:pointer;font-family:'Inter',sans-serif;margin-top:12px}
+  .btn:disabled{opacity:.45}
+  .foot{margin-top:28px;text-align:center;font-size:10.5px;color:var(--faint);line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="hdr-row">
+      <div>
+        <div class="brand disp">FSH <span>PREDICT</span></div>
+        <div class="sub">AI Match Intelligence · 5-Year Model</div>
+      </div>
+      <div class="live-ind"><span class="dot"></span><span id="liveCount">—</span></div>
+    </div>
+    <nav id="nav"></nav>
+  </header>
+  <main id="main"></main>
+  <div class="foot">Probabilities are model estimates, not guarantees.<br/>FSH Empire · Predict responsibly. 18+</div>
+</div>
+
+<script>
+/* ================= CONFIG ================= */
+const API = "https://fsh-predict-backend.onrender.com";
+const LIVE_POLL_MS = 90_000;
+
+const TABS = [
+  ["today","Today's Games"],["stats","Stats"],["top","Top Predictions"],
+  ["live","Live Scores"],["livepred","Live Predictions"],["highodds","High Odds"],
+];
+const CONTINENTS = ["All","Europe","South America","North America","Africa","Asia"];
+
+const $ = (s,el=document)=>el.querySelector(s);
+const esc = (s)=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const bandColor = p => p>=70?"var(--green)":p>=50?"var(--amber)":"var(--red)";
+const probChip = (p,big=false)=>`<div class="probwrap">
+  <span class="pct" style="color:${bandColor(p)};${big?'font-size:26px':''}">${p}%</span>
+  <span class="meter">${[1,2,3,4,5].map(i=>`<i style="${p>=i*20?`background:${bandColor(p)}`:''}"></i>`).join("")}</span></div>`;
+const spinner = (t)=>`<div class="msg"><div class="spin"></div>${esc(t)}</div>`;
+
+let wokeUp=false;
+async function api(path){
+  const slowTimer = setTimeout(()=>{ if(!wokeUp){ const m=$("#wakeMsg"); if(m) m.style.display="block"; } }, 4000);
+  try{
+    const r = await fetch(API+path);
+    wokeUp = true;
+    clearTimeout(slowTimer);
+    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.error||("HTTP "+r.status)); }
+    return await r.json();
+  }finally{ clearTimeout(slowTimer); }
+}
+const wakeNote = `<div id="wakeMsg" style="display:none" class="msg">Free server is waking up — first load can take up to a minute. Hang tight…</div>`;
+
+/* ================= STATE ================= */
+let tab="today", continent="All", country="All";
+let todayData=null, liveTimer=null;
+let teamA=null, teamB=null;
+
+/* ================= NAV ================= */
+function renderNav(){
+  $("#nav").innerHTML = TABS.map(([id,l])=>`<button class="${tab===id?'on':''}" data-t="${id}">${l}</button>`).join("");
+  $("#nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();});
+}
+
+/* ================= TODAY ================= */
+async function viewToday(){
+  const m=$("#main");
+  if(!todayData){
+    m.innerHTML = wakeNote + spinner("Loading today's fixtures…");
+    try{ todayData = (await api("/api/today")).matches; }
+    catch(e){ m.innerHTML = `<div class="msg">Couldn't load fixtures: ${esc(e.message)}<br/><br/><button class="btn" style="width:auto;padding:10px 22px" onclick="todayData=null;render()">Retry</button></div>`; return; }
+  }
+  const countries = ["All",...new Set(todayData.filter(x=>continent==="All"||x.continent===continent).map(x=>x.country))];
+  let list = todayData.filter(x=>(continent==="All"||x.continent===continent)&&(country==="All"||x.country===country));
+  const byLeague={}; list.forEach(x=>(byLeague[x.league]=byLeague[x.league]||[]).push(x));
+
+  m.innerHTML = `
+    <div class="chips">${CONTINENTS.map(c=>`<button class="chip ${continent===c?'on':''}" data-c="${c}">${c}</button>`).join("")}</div>
+    <div class="chips">${countries.map(c=>`<button class="chip ${country===c?'on':''}" data-k="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+    ${Object.entries(byLeague).map(([lg,ms])=>`
+      <div class="stitle">${esc(lg)}</div>
+      ${ms.map(x=>{
+        const t=new Date(x.date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+        const fin = x.status==="FT", liveNow = ["1H","2H","HT","ET"].includes(x.status);
+        return `<div class="card"><div class="row">
+          <div style="flex:1">
+            <div class="team" style="margin-bottom:8px"><img class="logo" src="${esc(x.home.logo)}" alt=""/>${esc(x.home.name)}</div>
+            <div class="team"><img class="logo" src="${esc(x.away.logo)}" alt=""/>${esc(x.away.name)}</div>
+          </div>
+          <div style="width:1px;align-self:stretch;background:var(--border);margin:0 14px"></div>
+          <div style="min-width:56px">
+            ${fin||liveNow
+              ? `<div class="ko">${x.goals.home??0}–${x.goals.away??0}</div><div class="kol">${liveNow?(x.minute+"'"):"FT"}</div>`
+              : `<div class="ko">${t}</div><div class="kol">KICKOFF</div>`}
+          </div></div></div>`;
+      }).join("")}`).join("") || `<div class="msg">No major-league fixtures match this filter today.</div>`}`;
+
+  m.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{continent=b.dataset.c;country="All";render();});
+  m.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{country=b.dataset.k;render();});
+}
+
+/* ================= STATS ================= */
+function teamPicker(slot){
+  return `<div style="flex:1;position:relative">
+    <input type="text" id="q${slot}" placeholder="Search team ${slot==="A"?"1":"2"}…" autocomplete="off"
+      value="${slot==="A"?esc(teamA?.name||""):esc(teamB?.name||"")}"/>
+    <div class="results" id="r${slot}" style="display:none"></div>
+  </div>`;
+}
+async function viewStats(){
+  const m=$("#main");
+  m.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin:6px 0 4px">
+      ${teamPicker("A")}<span class="disp" style="font-weight:700;color:var(--faint)">VS</span>${teamPicker("B")}
+    </div>
+    <button class="btn" id="analyze" ${teamA&&teamB?"":"disabled"}>Analyze head-to-head</button>
+    <div id="statsOut"></div>`;
+
+  for(const slot of ["A","B"]){
+    const input=$("#q"+slot), box=$("#r"+slot); let deb;
+    input.oninput=()=>{ clearTimeout(deb);
+      const q=input.value.trim();
+      if(q.length<3){box.style.display="none";return;}
+      deb=setTimeout(async()=>{
+        box.style.display="block"; box.innerHTML=`<div style="color:var(--dim)">Searching…</div>`;
+        try{
+          const {teams}=await api("/api/teams/search?q="+encodeURIComponent(q));
+          box.innerHTML = teams.length? teams.slice(0,8).map(t=>
+            `<div data-id="${t.id}" data-name="${esc(t.name)}"><img class="logo" src="${esc(t.logo)}" alt=""/>${esc(t.name)} <span style="color:var(--faint);font-size:11px">${esc(t.country||"")}</span></div>`).join("")
+            : `<div style="color:var(--dim)">No teams found</div>`;
+          box.querySelectorAll("[data-id]").forEach(d=>d.onclick=()=>{
+            const pick={id:+d.dataset.id,name:d.dataset.name};
+            if(slot==="A")teamA=pick;else teamB=pick;
+            render();
+          });
+        }catch(e){ box.innerHTML=`<div style="color:var(--red)">${esc(e.message)}</div>`; }
+      },500);
+    };
+  }
+
+  $("#analyze").onclick=async()=>{
+    const out=$("#statsOut");
+    out.innerHTML = wakeNote + spinner("Crunching 5 years of head-to-head…");
+    try{
+      const d=await api(`/api/h2h/${teamA.id}/${teamB.id}`);
+      const s=d.summary, p=d.prediction;
+      const outcomes=[[teamA.name+" win",p.probs.home],["Draw",p.probs.draw],[teamB.name+" win",p.probs.away]];
+      out.innerHTML=`
+        <div class="card" style="margin-top:12px">
+          <div style="display:flex;justify-content:space-around;text-align:center">
+            ${[[Math.round(s.homeRate*s.meetings),teamA.name+" wins","var(--green)"],
+               [Math.round(s.drawRate*s.meetings),"Draws","var(--amber)"],
+               [Math.round(s.awayRate*s.meetings),teamB.name+" wins","var(--red)"]].map(([n,l,c])=>
+              `<div><div class="disp" style="font-weight:700;font-size:32px;color:${c}">${n}</div>
+               <div style="font-size:10.5px;color:var(--dim)">${esc(l)}</div></div>`).join("")}
+          </div>
+          <div style="font-size:10px;color:var(--faint);text-align:center;margin-top:8px;letter-spacing:1px">
+            LAST 5 YEARS · ${s.meetings} MEETINGS ${p.confidence==="low-sample"?"· ⚠ SMALL SAMPLE":""}</div>
+        </div>
+        <div class="stitle">Match outcome model</div>
+        <div class="card">${outcomes.map(([n,pc])=>`
+          <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="flex:1;font-size:14px;font-weight:600">${esc(n)}</span>
+            <span class="bar"><i style="width:${pc}%;background:${bandColor(pc)}"></i></span>
+            ${probChip(pc)}</div>`).join("")}</div>
+        <div class="stitle">Best markets</div>
+        ${p.markets.map(mk=>{
+          const nm = mk.name.replace("Home",teamA.name).replace("Away",teamB.name);
+          return `<div class="card row" style="padding:12px 14px">
+            <div><div style="font-size:14px;font-weight:600">${esc(nm)}</div>
+            <div style="font-size:10.5px;color:${bandColor(mk.p)};font-weight:700;letter-spacing:1px;margin-top:3px">
+              ${mk.p>=70?"HIGH":mk.p>=50?"MODERATE":"LOW"} CONFIDENCE</div></div>${probChip(mk.p)}</div>`;}).join("")}
+        <div class="stitle">Recent meetings</div>
+        <div class="card" style="padding:0">${d.meetings.map((mt,i)=>`
+          <div style="display:flex;align-items:center;padding:10px 14px;${i<d.meetings.length-1?"border-bottom:1px solid var(--border)":""}">
+            <span style="width:84px;font-size:11.5px;color:var(--faint)">${esc(mt.date)}</span>
+            <span style="flex:1;font-size:12px;color:var(--dim)">${esc(mt.home)} v ${esc(mt.away)}</span>
+            <span class="disp" style="font-weight:700;font-size:17px">${esc(mt.score)}</span>
+          </div>`).join("")}</div>`;
+    }catch(e){ out.innerHTML=`<div class="msg">Analysis failed: ${esc(e.message)}</div>`; }
+  };
+}
+
+/* ================= TOP PREDICTIONS ================= */
+async function viewTop(){
+  const m=$("#main");
+  m.innerHTML = wakeNote + spinner("Model is scanning today's major fixtures — first run of the day takes a couple of minutes…");
+  try{
+    const {picks}=await api("/api/top-predictions");
+    m.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 2px 12px">
+        <span class="badge green">≥ 70% ONLY</span>
+        <span style="font-size:12px;color:var(--dim)">${picks.length} qualifying picks today</span></div>
+      ${picks.length? picks.map((pk,i)=>`
+        <div class="card" style="border-left:3px solid var(--green)">
+          <div class="row" style="align-items:flex-start;gap:10px">
+            <div style="flex:1">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px">
+                <span class="disp" style="font-weight:700;color:var(--faint)">#${i+1}</span>
+                <span class="badge">${esc(pk.league)}</span></div>
+              <div style="font-size:13px;color:var(--dim);margin-bottom:3px">${esc(pk.match)}</div>
+              <div class="disp" style="font-weight:700;font-size:20px">${esc(pk.market)}</div>
+              <div style="font-size:11px;color:var(--faint);margin-top:5px">
+                KO ${new Date(pk.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+            </div>${probChip(pk.p,true)}</div></div>`).join("")
+        : `<div class="msg">No pick reached 70% today — the model doesn't force it. Check back tomorrow or lower your threshold in Stats.</div>`}`;
+  }catch(e){ m.innerHTML=`<div class="msg">Couldn't build predictions: ${esc(e.message)}</div>`; }
+}
+
+/* ================= LIVE ================= */
+async function loadLive(){
+  try{
+    const {matches}=await api("/api/live");
+    $("#liveCount").textContent = matches.length+" LIVE";
+    return matches;
+  }catch(e){ $("#liveCount").textContent="OFFLINE"; throw e; }
+}
+async function viewLive(){
+  const m=$("#main");
+  m.innerHTML = wakeNote + spinner("Fetching live matches…");
+  const draw=(matches)=>{
+    m.innerHTML = matches.length? matches.map(x=>`
+      <div class="card">
+        <div class="row" style="margin-bottom:10px"><span class="badge">${esc(x.league)}</span>
+          <span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--live)">
+            <span class="dot"></span>${x.minute??"—"}'</span></div>
+        <div class="row">
+          <span class="team" style="flex:1"><img class="logo" src="${esc(x.home.logo)}" alt=""/>${esc(x.home.name)}</span>
+          <span class="score">${x.goals.home??0}–${x.goals.away??0}</span>
+          <span class="team" style="flex:1;text-align:right">${esc(x.away.name)}<img class="logo" src="${esc(x.away.logo)}" alt="" style="margin:0 0 0 8px"/></span>
+        </div></div>`).join("")
+      : `<div class="msg">No major-league matches are live right now.<br/>Auto-refreshes every 90 seconds.</div>`;
+  };
+  try{ draw(await loadLive()); }catch(e){ m.innerHTML=`<div class="msg">${esc(e.message)}</div>`; return; }
+  clearInterval(liveTimer);
+  liveTimer=setInterval(async()=>{ if(tab!=="live"){clearInterval(liveTimer);return;}
+    try{ draw(await loadLive()); }catch{} }, LIVE_POLL_MS);
+}
+
+/* ================= LIVE PREDICTIONS ================= */
+async function viewLivePred(){
+  const m=$("#main");
+  m.innerHTML = wakeNote + spinner("Analysing live matches past 25 minutes…");
+  const draw=(results)=>{
+    m.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin:6px 2px 12px">
+        <span class="badge green">≥ 70% ONLY</span>
+        <span style="font-size:12px;color:var(--dim)">After 25' · refreshes every 90s</span></div>
+      ${results.length? results.map(r=>`
+        <div class="card" style="border-left:3px solid var(--green)">
+          <div class="row" style="margin-bottom:8px">
+            <span style="font-size:13px;font-weight:600">${esc(r.fixture.home.name)}
+              <span class="disp" style="color:var(--gold);font-weight:700">${r.fixture.goals.home??0}–${r.fixture.goals.away??0}</span>
+              ${esc(r.fixture.away.name)}</span>
+            <span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--live)">
+              <span class="dot"></span>${r.fixture.minute}'</span></div>
+          ${r.predictions.map(p=>`<div class="row" style="padding:7px 0;border-top:1px solid var(--border)">
+            <span style="font-size:14px;font-weight:600">${esc(p.market)}</span>${probChip(p.p)}</div>`).join("")}
+        </div>`).join("")
+      : `<div class="msg">No live match past 25' has a ≥70% signal right now.</div>`}`;
+  };
+  try{ draw((await api("/api/live-predictions")).results); }
+  catch(e){ m.innerHTML=`<div class="msg">${esc(e.message)}</div>`; return; }
+  clearInterval(liveTimer);
+  liveTimer=setInterval(async()=>{ if(tab!=="livepred"){clearInterval(liveTimer);return;}
+    try{ draw((await api("/api/live-predictions")).results); }catch{} }, LIVE_POLL_MS);
+}
+
+/* ================= HIGH ODDS ================= */
+function viewHighOdds(){
+  $("#main").innerHTML = `
+    <div class="card" style="background:rgba(227,178,60,.06);border-color:rgba(227,178,60,.25)">
+      <div style="font-size:12px;color:var(--dim);line-height:1.6">
+        <span style="color:var(--gold);font-weight:700">Long-shot territory — coming in v2.</span>
+        Real bookmaker odds need API-Football's /odds endpoint, which is impractical on the free tier's request budget.
+        When you move to the Pro plan ($19/mo), this menu lights up with model-vs-bookmaker value picks at big odds.
+        Until then, the LOW-confidence markets in the Stats tab are your long-shot signals.
+      </div></div>`;
+}
+
+/* ================= ROUTER ================= */
+function render(){
+  renderNav();
+  clearInterval(liveTimer);
+  ({today:viewToday,stats:viewStats,top:viewTop,live:viewLive,livepred:viewLivePred,highodds:viewHighOdds})[tab]();
+}
+render();
+loadLive().catch(()=>{});
+</script>
+</body>
+</html>
