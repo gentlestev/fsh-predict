@@ -73,8 +73,8 @@
   .bar{height:6px;border-radius:3px;background:rgba(148,163,184,.12);overflow:hidden;flex:1.4}
   .bar i{display:block;height:100%;border-radius:3px;transition:width .6s ease}
 
-  input[type=text]{width:100%;padding:11px 12px;border-radius:10px;background:var(--surface2);
-    border:1px solid var(--border);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;font-weight:600}
+  input[type=text],input[type=password]{width:100%;padding:11px 12px;border-radius:10px;background:var(--surface2);
+    border:1px solid var(--border);color:var(--text);font-family:'Inter',sans-serif;font-size:14px;font-weight:600;margin-bottom:10px;display:block}
   .results{background:var(--surface2);border:1px solid var(--border);border-radius:10px;margin-top:6px;max-height:190px;overflow-y:auto}
   .results div{padding:10px 12px;font-size:13.5px;cursor:pointer;border-bottom:1px solid var(--border)}
   .results div:hover{background:rgba(91,124,250,.10)}
@@ -94,6 +94,7 @@
       </div>
       <div class="live-ind"><span class="dot"></span><span id="liveCount">—</span></div>
     </div>
+    <div id="roleControls" style="text-align:right;margin-top:6px"></div>
     <nav id="nav"></nav>
   </header>
   <main id="main"></main>
@@ -132,6 +133,138 @@ async function api(path){
 }
 const wakeNote = `<div id="wakeMsg" style="display:none" class="msg">Free server is waking up — first load can take up to a minute. Hang tight…</div>`;
 
+/* ================= AUTH / LOCK =================
+   Client-side only — no server, no database. The password hash and the
+   security-question answers below live in this file, which is public on
+   GitHub Pages. This keeps out casual visitors; it is NOT real security —
+   don't rely on it to protect anything sensitive. */
+const LS_HASH = "fsh_pw_hash";
+const LS_ROLE = "fsh_role";
+const GUEST_TABS = ["stats","top"];
+const SECURITY_Q = [
+  { q: "What is your wife's pet's name?", hash: "c60dc706a86317eea23f2f2e2c4b9f2d4956469f992fd1b46c4365a336879e87" },
+  { q: "What is your childhood nickname?", hash: "07c05679b1cfed895de0d8383a02cafb7a040d5db41878fa2c47103fe7aba541" },
+];
+
+async function sha256(text){
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+}
+const getRole = () => localStorage.getItem(LS_ROLE);
+const setRole = (r) => { if(r) localStorage.setItem(LS_ROLE,r); else localStorage.removeItem(LS_ROLE); };
+const hasPassword = () => !!localStorage.getItem(LS_HASH);
+
+let role = getRole();
+let gateStage = null;       // null | setup | choice | login | pwchange-q | pwchange-new
+let gateError = "";
+let pwChangeQStep = 0;
+
+function onEnter(id, fn){ const el=$(id); if(el) el.addEventListener("keydown", e=>{ if(e.key==="Enter") fn(); }); }
+
+function renderGate(){
+  $("#nav").style.display = "none";
+  const m = $("#main");
+  const box = (title, body) => `<div class="card" style="max-width:360px;margin:32px auto">
+    <div class="disp" style="font-weight:700;font-size:20px;margin-bottom:12px">${title}</div>${body}
+    ${gateError?`<div style="color:var(--red);font-size:12px;margin:-2px 0 10px">${esc(gateError)}</div>`:""}
+  </div>`;
+
+  if(gateStage==="setup"){
+    m.innerHTML = box("Set Admin Password", `
+      <div style="font-size:12px;color:var(--dim);margin-bottom:12px">Create a password to unlock full access on this device. No username needed.</div>
+      <input type="password" id="pwNew1" placeholder="New password"/>
+      <input type="password" id="pwNew2" placeholder="Confirm password"/>
+      <button class="btn" id="pwSetBtn">Create &amp; log in</button>`);
+    const submit = async ()=>{
+      const p1=$("#pwNew1").value, p2=$("#pwNew2").value;
+      if(p1.length<4){ gateError="Password must be at least 4 characters."; renderGate(); return; }
+      if(p1!==p2){ gateError="Passwords don't match."; renderGate(); return; }
+      localStorage.setItem(LS_HASH, await sha256(p1));
+      setRole("admin"); role="admin"; gateStage=null; gateError=""; tab="top";
+      render();
+    };
+    $("#pwSetBtn").onclick=submit; onEnter("#pwNew2",submit);
+  }
+
+  else if(gateStage==="choice"){
+    m.innerHTML = box("FSH Predict is locked", `
+      <button class="btn" id="adminLoginBtn">🔒 Admin login</button>
+      <button class="btn" id="guestBtn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);margin-top:10px">👤 Continue as guest</button>`);
+    $("#adminLoginBtn").onclick=()=>{ gateStage="login"; gateError=""; renderGate(); };
+    $("#guestBtn").onclick=()=>{ setRole("guest"); role="guest"; gateStage=null; tab="stats"; render(); };
+  }
+
+  else if(gateStage==="login"){
+    m.innerHTML = box("Admin Login", `
+      <input type="password" id="pwLogin" placeholder="Password"/>
+      <button class="btn" id="pwLoginBtn">Unlock</button>
+      <button class="btn" id="backBtn" style="background:none;color:var(--dim)">← Back</button>`);
+    const submit = async ()=>{
+      const hash = await sha256($("#pwLogin").value);
+      if(hash===localStorage.getItem(LS_HASH)){
+        setRole("admin"); role="admin"; gateStage=null; gateError=""; tab="top"; render();
+      } else { gateError="Incorrect password."; renderGate(); }
+    };
+    $("#pwLoginBtn").onclick=submit; onEnter("#pwLogin",submit);
+    $("#backBtn").onclick=()=>{ gateStage="choice"; gateError=""; renderGate(); };
+  }
+
+  else if(gateStage==="pwchange-q"){
+    const step = SECURITY_Q[pwChangeQStep];
+    m.innerHTML = box("Verify it's you", `
+      <div style="font-size:13px;color:var(--dim);margin-bottom:10px">${esc(step.q)}</div>
+      <input type="text" id="secAnswer" placeholder="Your answer"/>
+      <button class="btn" id="secSubmitBtn">Submit</button>
+      ${pwChangeQStep===0?`<button class="btn" id="secForgotBtn" style="background:none;color:var(--dim);margin-top:6px">I don't remember — try another question</button>`:""}
+      <button class="btn" id="secCancelBtn" style="background:none;color:var(--faint);margin-top:4px">Cancel</button>`);
+    const submit = ()=>{
+      const ans=($("#secAnswer").value||"").trim().toLowerCase();
+      if(ans===step.a){ gateStage="pwchange-new"; gateError=""; renderGate(); return; }
+      gateError = pwChangeQStep===0
+        ? "That's not it — try again, or use the link below."
+        : "That's not it either. If you're truly stuck, clear this site's browser data to reset the lock (you'll set a fresh password — nothing else is stored).";
+      renderGate();
+    };
+    $("#secSubmitBtn").onclick=submit; onEnter("#secAnswer",submit);
+    if($("#secForgotBtn")) $("#secForgotBtn").onclick=()=>{ pwChangeQStep=1; gateError=""; renderGate(); };
+    $("#secCancelBtn").onclick=()=>{ gateStage=null; pwChangeQStep=0; gateError=""; render(); };
+  }
+
+  else if(gateStage==="pwchange-new"){
+    m.innerHTML = box("Set New Password", `
+      <input type="password" id="pwChange1" placeholder="New password"/>
+      <input type="password" id="pwChange2" placeholder="Confirm new password"/>
+      <button class="btn" id="pwChangeSaveBtn">Save new password</button>`);
+    const submit = async ()=>{
+      const p1=$("#pwChange1").value, p2=$("#pwChange2").value;
+      if(p1.length<4){ gateError="Password must be at least 4 characters."; renderGate(); return; }
+      if(p1!==p2){ gateError="Passwords don't match."; renderGate(); return; }
+      localStorage.setItem(LS_HASH, await sha256(p1));
+      gateStage=null; pwChangeQStep=0; gateError="";
+      render();
+    };
+    $("#pwChangeSaveBtn").onclick=submit; onEnter("#pwChange2",submit);
+  }
+}
+
+function renderRoleControls(){
+  const el = $("#roleControls");
+  if(!el) return;
+  if(role==="admin"){
+    el.innerHTML = `<span style="font-size:11px;color:var(--dim)">
+      <a href="#" id="changePwLink" style="color:var(--gold);text-decoration:none">Change password</a> ·
+      <a href="#" id="lockLink" style="color:var(--faint);text-decoration:none">🔒 Lock</a></span>`;
+    $("#changePwLink").onclick=(e)=>{e.preventDefault(); gateStage="pwchange-q"; pwChangeQStep=0; gateError=""; render();};
+    $("#lockLink").onclick=(e)=>{e.preventDefault(); setRole(null); role=null; gateStage="choice"; render();};
+  } else if(role==="guest"){
+    el.innerHTML = `<span style="font-size:11px;color:var(--dim)">Guest mode ·
+      <a href="#" id="adminUpLink" style="color:var(--gold);text-decoration:none">Admin login</a></span>`;
+    $("#adminUpLink").onclick=(e)=>{e.preventDefault(); setRole(null); role=null; gateStage="choice"; render();};
+  } else {
+    el.innerHTML = "";
+  }
+}
+
 /* ================= STATE ================= */
 let tab="today", continent="All", country="All";
 let todayData=null, liveTimer=null;
@@ -139,7 +272,9 @@ let teamA=null, teamB=null;
 
 /* ================= NAV ================= */
 function renderNav(){
-  $("#nav").innerHTML = TABS.map(([id,l])=>`<button class="${tab===id?'on':''}" data-t="${id}">${l}</button>`).join("");
+  const visible = role==="guest" ? TABS.filter(([id])=>GUEST_TABS.includes(id)) : TABS;
+  $("#nav").style.display = "";
+  $("#nav").innerHTML = visible.map(([id,l])=>`<button class="${tab===id?'on':''}" data-t="${id}">${l}</button>`).join("");
   $("#nav").querySelectorAll("button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;render();});
 }
 
@@ -385,7 +520,12 @@ async function viewHighOdds(){
 
 /* ================= ROUTER ================= */
 function render(){
+  if(gateStage){ renderGate(); return; }
+  role = getRole();
+  if(!role){ gateStage = hasPassword() ? "choice" : "setup"; renderGate(); return; }
+  if(role==="guest" && !GUEST_TABS.includes(tab)) tab="stats";
   renderNav();
+  renderRoleControls();
   clearInterval(liveTimer);
   ({today:viewToday,stats:viewStats,top:viewTop,live:viewLive,livepred:viewLivePred,highodds:viewHighOdds})[tab]();
 }
