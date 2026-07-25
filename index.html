@@ -139,6 +139,12 @@ const wakeNote = `<div id="wakeMsg" style="display:none" class="msg">Free server
    GitHub Pages. This keeps out casual visitors; it is NOT real security —
    don't rely on it to protect anything sensitive. */
 const LS_HASH = "fsh_pw_hash";
+/* Paste your password's hash here so it's baked into the deployed file —
+   this is what makes it the SAME lock for every visitor, not just your
+   own phone. Get this value from Admin → "Show sync code" after you set
+   your password, then paste it here and redeploy. Leave empty ("") to
+   let the first visitor on each device set their own (old behavior). */
+const HARDCODED_HASH = "";
 const LS_ROLE = "fsh_role";
 const GUEST_TABS = ["stats","top"];
 const SECURITY_Q = [
@@ -152,7 +158,8 @@ async function sha256(text){
 }
 const getRole = () => localStorage.getItem(LS_ROLE);
 const setRole = (r) => { if(r) localStorage.setItem(LS_ROLE,r); else localStorage.removeItem(LS_ROLE); };
-const hasPassword = () => !!localStorage.getItem(LS_HASH);
+const hasPassword = () => !!localStorage.getItem(LS_HASH) || !!HARDCODED_HASH;
+const currentHash = () => localStorage.getItem(LS_HASH) || HARDCODED_HASH;
 
 let role = getRole();
 let gateStage = null;       // null | setup | choice | login | pwchange-q | pwchange-new
@@ -201,7 +208,7 @@ function renderGate(){
       <button class="btn" id="backBtn" style="background:none;color:var(--dim)">← Back</button>`);
     const submit = async ()=>{
       const hash = await sha256($("#pwLogin").value);
-      if(hash===localStorage.getItem(LS_HASH)){
+      if(hash===currentHash()){
         setRole("admin"); role="admin"; gateStage=null; gateError=""; tab="top"; render();
       } else { gateError="Incorrect password."; renderGate(); }
     };
@@ -217,9 +224,10 @@ function renderGate(){
       <button class="btn" id="secSubmitBtn">Submit</button>
       ${pwChangeQStep===0?`<button class="btn" id="secForgotBtn" style="background:none;color:var(--dim);margin-top:6px">I don't remember — try another question</button>`:""}
       <button class="btn" id="secCancelBtn" style="background:none;color:var(--faint);margin-top:4px">Cancel</button>`);
-    const submit = ()=>{
+    const submit = async ()=>{
       const ans=($("#secAnswer").value||"").trim().toLowerCase();
-      if(ans===step.a){ gateStage="pwchange-new"; gateError=""; renderGate(); return; }
+      const ansHash = await sha256(ans);
+      if(ansHash===step.hash){ gateStage="pwchange-new"; gateError=""; renderGate(); return; }
       gateError = pwChangeQStep===0
         ? "That's not it — try again, or use the link below."
         : "That's not it either. If you're truly stuck, clear this site's browser data to reset the lock (you'll set a fresh password — nothing else is stored).";
@@ -252,10 +260,21 @@ function renderRoleControls(){
   if(!el) return;
   if(role==="admin"){
     el.innerHTML = `<span style="font-size:11px;color:var(--dim)">
+      <a href="#" id="syncLink" style="color:var(--gold);text-decoration:none">Show sync code</a> ·
       <a href="#" id="changePwLink" style="color:var(--gold);text-decoration:none">Change password</a> ·
-      <a href="#" id="lockLink" style="color:var(--faint);text-decoration:none">🔒 Lock</a></span>`;
+      <a href="#" id="lockLink" style="color:var(--faint);text-decoration:none">🔒 Lock</a></span>
+      <div id="syncBox" style="display:none;margin-top:8px;text-align:left"></div>`;
     $("#changePwLink").onclick=(e)=>{e.preventDefault(); gateStage="pwchange-q"; pwChangeQStep=0; gateError=""; render();};
     $("#lockLink").onclick=(e)=>{e.preventDefault(); setRole(null); role=null; gateStage="choice"; render();};
+    $("#syncLink").onclick=(e)=>{
+      e.preventDefault();
+      const box=$("#syncBox");
+      box.style.display = box.style.display==="none" ? "block" : "none";
+      box.innerHTML = `<div class="card" style="padding:10px 12px">
+        <div style="font-size:11px;color:var(--dim);margin-bottom:6px">
+          Copy this and send it to Claude to bake into the site's code — every visitor will then see the same lock, not just this device.</div>
+        <input type="text" readonly value="${currentHash()}" onclick="this.select()" style="font-size:11px;margin-bottom:0"/></div>`;
+    };
   } else if(role==="guest"){
     el.innerHTML = `<span style="font-size:11px;color:var(--dim)">Guest mode ·
       <a href="#" id="adminUpLink" style="color:var(--gold);text-decoration:none">Admin login</a></span>`;
