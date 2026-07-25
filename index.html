@@ -197,12 +197,13 @@ async function viewStats(){
       deb=setTimeout(async()=>{
         box.style.display="block"; box.innerHTML=`<div style="color:var(--dim)">Searching…</div>`;
         try{
-          const {teams}=await api("/api/teams/search?q="+encodeURIComponent(q));
+          const {teams,provider}=await api("/api/teams/search?q="+encodeURIComponent(q));
+          teams.forEach(t=>t._provider=provider);
           box.innerHTML = teams.length? teams.slice(0,8).map(t=>
             `<div data-id="${t.id}" data-name="${esc(t.name)}"><img class="logo" src="${esc(t.logo)}" alt=""/>${esc(t.name)} <span style="color:var(--faint);font-size:11px">${esc(t.country||"")}</span></div>`).join("")
             : `<div style="color:var(--dim)">No teams found</div>`;
           box.querySelectorAll("[data-id]").forEach(d=>d.onclick=()=>{
-            const pick={id:+d.dataset.id,name:d.dataset.name};
+            const pick={id:+d.dataset.id,name:d.dataset.name,provider:teams[0]?._provider};
             if(slot==="A")teamA=pick;else teamB=pick;
             render();
           });
@@ -215,7 +216,8 @@ async function viewStats(){
     const out=$("#statsOut");
     out.innerHTML = wakeNote + spinner("Crunching 5 years of head-to-head…");
     try{
-      const d=await api(`/api/h2h/${teamA.id}/${teamB.id}`);
+      const providerParam = (teamA.provider && teamA.provider===teamB.provider) ? `?provider=${teamA.provider}` : "";
+      const d=await api(`/api/h2h/${teamA.id}/${teamB.id}${providerParam}`);
       const s=d.summary, p=d.prediction;
       const outcomes=[[teamA.name+" win",p.probs.home],["Draw",p.probs.draw],[teamB.name+" win",p.probs.away]];
       out.innerHTML=`
