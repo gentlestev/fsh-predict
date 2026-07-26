@@ -120,6 +120,18 @@ const probChip = (p,big=false)=>`<div class="probwrap">
   <span class="meter">${[1,2,3,4,5].map(i=>`<i style="${p>=i*20?`background:${bandColor(p)}`:''}"></i>`).join("")}</span></div>`;
 const spinner = (t)=>`<div class="msg"><div class="spin"></div>${esc(t)}</div>`;
 
+/** Shared "was it right" badge for graded picks. result is "correct"|"wrong"|null. */
+function resultBadge(result, finalScore){
+  if(result==="correct") return `<div style="margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--green)">✓ CORRECT · FT ${esc(finalScore)}</div>`;
+  if(result==="wrong") return `<div style="margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--red)">✗ WRONG · FT ${esc(finalScore)}</div>`;
+  return `<div style="margin-top:8px;font-size:10.5px;color:var(--faint)">⏳ Pending — not finished yet</div>`;
+}
+function resultBorder(result, fallback){
+  if(result==="correct") return "var(--green)";
+  if(result==="wrong") return "var(--red)";
+  return fallback;
+}
+
 let wokeUp=false;
 async function api(path){
   const slowTimer = setTimeout(()=>{ if(!wokeUp){ const m=$("#wakeMsg"); if(m) m.style.display="block"; } }, 4000);
@@ -429,7 +441,7 @@ async function viewTop(){
         <span class="badge green">≥ 70% ONLY</span>
         <span style="font-size:12px;color:var(--dim)">${picks.length} qualifying picks today</span></div>
       ${picks.length? picks.map((pk,i)=>`
-        <div class="card" style="border-left:3px solid var(--green)">
+        <div class="card" style="border-left:3px solid ${resultBorder(pk.result,'var(--green)')}">
           <div class="row" style="align-items:flex-start;gap:10px">
             <div style="flex:1">
               <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px">
@@ -439,6 +451,7 @@ async function viewTop(){
               <div class="disp" style="font-weight:700;font-size:20px">${esc(pk.market)}</div>
               <div style="font-size:11px;color:var(--faint);margin-top:5px">
                 KO ${new Date(pk.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+              ${resultBadge(pk.result,pk.finalScore)}
             </div>${probChip(pk.p,true)}</div></div>`).join("")
         : `<div class="msg">No pick reached 70% today — the model doesn't force it. Check back tomorrow or lower your threshold in Stats.</div>`}`;
   }catch(e){ m.innerHTML=`<div class="msg">Couldn't build predictions: ${esc(e.message)}</div>`; }
@@ -478,7 +491,7 @@ async function viewLive(){
 async function viewLivePred(){
   const m=$("#main");
   m.innerHTML = wakeNote + spinner("Analysing live matches past 25 minutes…");
-  const draw=(results)=>{
+  const draw=(results,history)=>{
     m.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;margin:6px 2px 12px">
         <span class="badge green">≥ 70% ONLY</span>
@@ -494,13 +507,26 @@ async function viewLivePred(){
           ${r.predictions.map(p=>`<div class="row" style="padding:7px 0;border-top:1px solid var(--border)">
             <span style="font-size:14px;font-weight:600">${esc(p.market)}</span>${probChip(p.p)}</div>`).join("")}
         </div>`).join("")
-      : `<div class="msg">No live match past 25' has a ≥70% signal right now.</div>`}`;
+      : `<div class="msg">No live match past 25' has a ≥70% signal right now.</div>`}
+      ${history && history.length? `
+        <div class="stitle">Today's graded results</div>
+        <div class="card" style="padding:0">${history.map((h,i)=>`
+          <div style="display:flex;align-items:center;padding:10px 14px;${i<history.length-1?"border-bottom:1px solid var(--border)":""}">
+            <span style="width:64px;text-align:center;font-size:9.5px;font-weight:800;letter-spacing:.5px;padding:4px 0;border-radius:4px;
+              color:${h.result==='correct'?'var(--green)':'var(--red)'};
+              background:${h.result==='correct'?'rgba(34,192,141,.12)':'rgba(229,83,75,.12)'}">
+              ${h.result==='correct'?'✓ HIT':'✗ MISS'}</span>
+            <div style="flex:1;margin-left:10px">
+              <div style="font-size:13px;font-weight:600">${esc(h.market)}</div>
+              <div style="font-size:11px;color:var(--faint)">${esc(h.match)} · FT ${esc(h.finalScore)}</div>
+            </div>
+          </div>`).join("")}</div>` : ""}`;
   };
-  try{ draw((await api("/api/live-predictions")).results); }
+  try{ const d=await api("/api/live-predictions"); draw(d.results, d.history); }
   catch(e){ m.innerHTML=`<div class="msg">${esc(e.message)}</div>`; return; }
   clearInterval(liveTimer);
   liveTimer=setInterval(async()=>{ if(tab!=="livepred"){clearInterval(liveTimer);return;}
-    try{ draw((await api("/api/live-predictions")).results); }catch{} }, LIVE_POLL_MS);
+    try{ const d=await api("/api/live-predictions"); draw(d.results, d.history); }catch{} }, LIVE_POLL_MS);
 }
 
 /* ================= DAILY BOMB ================= */
@@ -517,7 +543,7 @@ async function viewHighOdds(){
           "Odds" shown are a model estimate (100 ÷ probability), not real bookmaker prices — stake small, they're bombs for a reason.
         </div></div>
       ${bombs.length? bombs.map((b,i)=>`
-        <div class="card" style="border-left:3px solid var(--red)">
+        <div class="card" style="border-left:3px solid ${resultBorder(b.result,'var(--red)')}">
           <div class="row" style="align-items:flex-start;gap:10px">
             <div style="flex:1">
               <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px">
@@ -527,6 +553,7 @@ async function viewHighOdds(){
               <div class="disp" style="font-weight:700;font-size:20px">${esc(b.market)}</div>
               <div style="font-size:11px;color:var(--faint);margin-top:5px">
                 KO ${new Date(b.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+              ${resultBadge(b.result,b.finalScore)}
             </div>
             <div style="text-align:right;min-width:66px">
               <div class="disp" style="font-weight:700;font-size:26px;color:var(--red)">@${b.impliedOdds.toFixed(2)}</div>
@@ -556,7 +583,7 @@ async function viewCScore(){
           Picks are ranked by how much clearer the top pick is over the runner-up, not by percentage alone.
         </div></div>
       ${picks.length? picks.map((p,i)=>`
-        <div class="card" style="border-left:3px solid ${csColor(p.p)}">
+        <div class="card" style="border-left:3px solid ${resultBorder(p.result,csColor(p.p))}">
           <div class="row" style="align-items:flex-start;gap:10px">
             <div style="flex:1">
               <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px">
@@ -567,6 +594,7 @@ async function viewCScore(){
               <div style="font-size:10.5px;color:${csColor(p.p)};font-weight:700;letter-spacing:1px;margin-top:5px">${csLabel(p.p)}</div>
               <div style="font-size:11px;color:var(--faint);margin-top:6px">
                 Runner-up: ${esc(p.runnerUp.score)} at ${p.runnerUp.p}% · KO ${new Date(p.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
+              ${resultBadge(p.result,p.finalScore)}
             </div>
             <div style="text-align:right;min-width:56px">
               <div class="disp" style="font-weight:700;font-size:24px;color:${csColor(p.p)}">${p.p}%</div>
