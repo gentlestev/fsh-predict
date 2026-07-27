@@ -132,6 +132,28 @@ function resultBorder(result, fallback){
   return fallback;
 }
 
+/** Copies text to clipboard for pasting into a betting app's search box.
+ *  Shows a brief "Copied" flash on the tapped element instead of an alert. */
+async function copyToClipboard(text, el){
+  try{
+    await navigator.clipboard.writeText(text);
+    const original = el.textContent;
+    el.textContent = "✓ Copied";
+    setTimeout(()=>{ el.textContent = original; }, 1200);
+  }catch{
+    el.textContent = "Copy failed — long-press to select";
+    setTimeout(()=>{ el.textContent = "📋 "+text; }, 1500);
+  }
+}
+/** Small tap-to-copy chip for a single team name — paste straight into
+ *  SportyBet's (or any bookmaker's) search box instead of retyping. */
+function copyChip(name){
+  const safe = esc(name).replace(/'/g,"&#39;");
+  return `<button onclick="copyToClipboard('${safe.replace(/"/g,'&quot;')}',this)"
+    style="background:var(--surface2);border:1px solid var(--border);color:var(--dim);font-size:10.5px;
+    padding:3px 8px;border-radius:6px;margin:2px 4px 0 0;cursor:pointer;font-family:'Inter',sans-serif">📋 ${esc(name)}</button>`;
+}
+
 let wokeUp=false;
 async function api(path){
   const slowTimer = setTimeout(()=>{ if(!wokeUp){ const m=$("#wakeMsg"); if(m) m.style.display="block"; } }, 4000);
@@ -460,6 +482,7 @@ function renderTopList(){
                 <span class="disp" style="font-weight:700;color:var(--faint)">#${i+1}</span>
                 <span class="badge">${esc(pk.league)}</span></div>
               <div style="font-size:13px;color:var(--dim);margin-bottom:3px">${esc(pk.match)}</div>
+              <div>${copyChip(pk.home)}${copyChip(pk.away)}</div>
               <div class="disp" style="font-weight:700;font-size:20px">${esc(pk.market)}</div>
               <div style="font-size:11px;color:var(--faint);margin-top:5px">
                 KO ${new Date(pk.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
@@ -576,6 +599,7 @@ function renderBombList(){
                 <span class="disp" style="font-weight:700;color:var(--faint)">💣 #${i+1}</span>
                 <span class="badge">${esc(b.league)}</span></div>
               <div style="font-size:13px;color:var(--dim);margin-bottom:3px">${esc(b.match)}</div>
+              <div>${copyChip(b.home)}${copyChip(b.away)}</div>
               <div class="disp" style="font-weight:700;font-size:20px">${esc(b.market)}</div>
               <div style="font-size:11px;color:var(--faint);margin-top:5px">
                 KO ${new Date(b.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</div>
@@ -624,6 +648,7 @@ function renderCScoreList(){
                 <span class="disp" style="font-weight:700;color:var(--faint)">#${i+1}</span>
                 <span class="badge">${esc(p.league)}</span></div>
               <div style="font-size:13px;color:var(--dim);margin-bottom:3px">${esc(p.match)}</div>
+              <div>${copyChip(p.home)}${copyChip(p.away)}</div>
               <div class="disp" style="font-weight:700;font-size:26px">${esc(p.score)}</div>
               <div style="font-size:10.5px;color:${csColor(p.p)};font-weight:700;letter-spacing:1px;margin-top:5px">${csLabel(p.p)}</div>
               <div style="font-size:11px;color:var(--faint);margin-top:6px">
