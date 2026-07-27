@@ -109,7 +109,7 @@ const LIVE_POLL_MS = 90_000;
 const TABS = [
   ["today","Today's Games"],["stats","Stats"],["top","Top Predictions"],
   ["live","Live Scores"],["livepred","Live Predictions"],["highodds","Daily Bomb"],["cscore","Correct Score"],
-  ["gameslist","Games List"],
+  ["gameslist","Games List"],["dailysel","Daily Selection"],
 ];
 const CONTINENTS = ["All","Europe","South America","North America","Africa","Asia"];
 
@@ -735,6 +735,56 @@ async function viewGamesList(){
   }catch(e){ m.innerHTML=`<div class="msg">Couldn't load games list: ${esc(e.message)}</div>`; }
 }
 
+/* ================= DAILY SELECTION (accumulators) ================= */
+const ACCA_TARGETS = [3,10,50,100,500,1000];
+let accaTarget = 3;
+const accaChipsHTML = () => `<div class="chips">${ACCA_TARGETS.map(t=>
+  `<button class="chip ${accaTarget===t?'on':''}" data-acca="${t}">${t}odd</button>`).join("")}</div>`;
+function wireAccaChips(){
+  document.querySelectorAll("[data-acca]").forEach(b=>b.onclick=()=>{
+    accaTarget=Number(b.dataset.acca); viewDailySel();
+  });
+}
+async function viewDailySel(){
+  const m=$("#main");
+  m.innerHTML = accaChipsHTML() + wakeNote + spinner(`Building the ${accaTarget}odd accumulator…`);
+  wireAccaChips();
+  try{
+    const d = await api(`/api/accumulator?target=${accaTarget}`);
+    const statusColor = d.overall==="won"?"var(--green)":d.overall==="lost"?"var(--red)":"var(--gold)";
+    const statusText = d.overall==="won"?"✓ WON":d.overall==="lost"?"✗ LOST":"⏳ PENDING";
+    m.innerHTML = accaChipsHTML() + `
+      <div class="card" style="text-align:center;margin:10px 0 14px">
+        <div style="font-size:11px;color:var(--dim);letter-spacing:1px">TARGET ${d.target}ODD ACCUMULATOR</div>
+        <div class="disp" style="font-weight:700;font-size:32px;margin:6px 0">${d.cumulativeOdds.toFixed(2)}x</div>
+        <div style="font-size:11px;color:${statusColor};font-weight:700">${statusText}</div>
+        ${!d.targetReached? `<div style="font-size:11px;color:var(--amber);margin-top:6px">Couldn't fully reach ${d.target}x today — only ${d.legCount} qualifying legs were available.</div>`
+          : `<div style="font-size:10.5px;color:var(--faint);margin-top:4px">Odds land where they land — legs are picked safest-first, not forced to hit the target exactly.</div>`}
+        <div style="font-size:10.5px;color:var(--faint);margin-top:4px">${d.legCount} legs · one pick per match, safest first</div>
+      </div>
+      ${d.legs.length? d.legs.map((l,i)=>`
+        <div class="card" style="border-left:3px solid ${resultBorder(l.result,'var(--gold)')}">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px">
+            <span class="disp" style="font-weight:700;color:var(--faint)">Leg ${i+1}</span>
+            <span class="badge">${esc(l.league)}</span></div>
+          <div style="font-size:13px;color:var(--dim);margin-bottom:3px">${esc(l.match)}</div>
+          <div style="margin-bottom:6px">${copyChip(l.home)}${copyChip(l.away)}</div>
+          <div class="row">
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">${esc(l.market)}</div>
+              ${resultBadge(l.result,l.finalScore)}
+            </div>
+            <div style="text-align:right;min-width:56px">
+              <div class="disp" style="font-weight:700;font-size:18px;color:var(--gold)">@${l.impliedOdds.toFixed(2)}</div>
+              <div style="margin-top:4px">${probChip(l.p)}</div>
+            </div>
+          </div>
+        </div>`).join("")
+      : `<div class="msg">Not enough analyzed fixtures today to build this accumulator.</div>`}`;
+    wireAccaChips();
+  }catch(e){ m.innerHTML = accaChipsHTML() + `<div class="msg">Couldn't build accumulator: ${esc(e.message)}</div>`; wireAccaChips(); }
+}
+
 /* ================= ROUTER ================= */
 function render(){
   if(gateStage){ renderGate(); return; }
@@ -744,7 +794,7 @@ function render(){
   renderNav();
   renderRoleControls();
   clearInterval(liveTimer);
-  ({today:viewToday,stats:viewStats,top:viewTop,live:viewLive,livepred:viewLivePred,highodds:viewHighOdds,cscore:viewCScore,gameslist:viewGamesList})[tab]();
+  ({today:viewToday,stats:viewStats,top:viewTop,live:viewLive,livepred:viewLivePred,highodds:viewHighOdds,cscore:viewCScore,gameslist:viewGamesList,dailysel:viewDailySel})[tab]();
 }
 render();
 loadLive().catch(()=>{});
