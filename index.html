@@ -109,6 +109,7 @@ const LIVE_POLL_MS = 90_000;
 const TABS = [
   ["today","Today's Games"],["stats","Stats"],["top","Top Predictions"],
   ["live","Live Scores"],["livepred","Live Predictions"],["highodds","Daily Bomb"],["cscore","Correct Score"],
+  ["gameslist","Games List"],
 ];
 const CONTINENTS = ["All","Europe","South America","North America","Africa","Asia"];
 
@@ -672,6 +673,68 @@ async function viewCScore(){
   }catch(e){ m.innerHTML=`<div class="msg">Couldn't load correct-score picks: ${esc(e.message)}</div>`; }
 }
 
+/* ================= GAMES LIST =================
+   Reorganizes Top Predictions by confidence tier (90-100 / 80-90 / 70-80),
+   and within each tier, merges every market for the SAME match into one
+   card instead of showing the match repeated once per market. A match can
+   legitimately appear in more than one tier if it has picks spanning both. */
+let gamesListCache=[];
+const TIERS = [
+  { id:"t90", label:"90–100%", min:90, max:101, color:"var(--green)" },
+  { id:"t80", label:"80–90%", min:80, max:90, color:"var(--amber)" },
+  { id:"t70", label:"70–80%", min:70, max:80, color:"var(--red)" },
+];
+
+function renderGamesList(){
+  const picks = gamesListCache.filter(pk=>passesFilter(pk.result));
+  let html = filterChipsHTML();
+
+  for(const tier of TIERS){
+    const inTier = picks.filter(pk=>pk.p>=tier.min && pk.p<tier.max);
+    if(inTier.length===0) continue;
+
+    // group by fixtureId — merge every market for the same match into one card
+    const byMatch = new Map();
+    for(const pk of inTier){
+      if(!byMatch.has(pk.fixtureId)) byMatch.set(pk.fixtureId, { ...pk, picks:[] });
+      byMatch.get(pk.fixtureId).picks.push(pk);
+    }
+
+    html += `<div class="stitle" style="color:${tier.color}">${tier.label} <span style="color:var(--faint);font-weight:400;text-transform:none;letter-spacing:0">· ${byMatch.size} game${byMatch.size===1?'':'s'}</span></div>`;
+    for(const g of byMatch.values()){
+      html += `<div class="card" style="border-left:3px solid ${tier.color}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px">
+          <span class="badge">${esc(g.league)}</span>
+          <span style="font-size:11px;color:var(--faint)">KO ${new Date(g.kickoff).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span></div>
+        <div style="font-size:13px;color:var(--dim);margin-bottom:3px">${esc(g.match)}</div>
+        <div style="margin-bottom:8px">${copyChip(g.home)}${copyChip(g.away)}</div>
+        ${g.picks.map(pk=>`
+          <div class="row" style="padding:7px 0;border-top:1px solid var(--border)">
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">${esc(pk.market)}</div>
+              ${pk.result==="correct"?`<div style="font-size:10.5px;color:var(--green);font-weight:700;margin-top:2px">✓ CORRECT · FT ${esc(pk.finalScore)}</div>`
+                :pk.result==="wrong"?`<div style="font-size:10.5px;color:var(--red);font-weight:700;margin-top:2px">✗ WRONG · FT ${esc(pk.finalScore)}</div>`
+                :`<div style="font-size:10.5px;color:var(--faint);margin-top:2px">⏳ Pending</div>`}
+            </div>${probChip(pk.p)}</div>`).join("")}
+      </div>`;
+    }
+  }
+
+  if(!html.includes("card")) html += `<div class="msg">No games match this filter right now.</div>`;
+  $("#main").innerHTML = html;
+  wireFilterChips(renderGamesList);
+}
+
+async function viewGamesList(){
+  const m=$("#main");
+  m.innerHTML = wakeNote + spinner("Sorting today's picks by confidence…");
+  try{
+    const {picks}=await api("/api/top-predictions");
+    gamesListCache = picks;
+    renderGamesList();
+  }catch(e){ m.innerHTML=`<div class="msg">Couldn't load games list: ${esc(e.message)}</div>`; }
+}
+
 /* ================= ROUTER ================= */
 function render(){
   if(gateStage){ renderGate(); return; }
@@ -681,7 +744,7 @@ function render(){
   renderNav();
   renderRoleControls();
   clearInterval(liveTimer);
-  ({today:viewToday,stats:viewStats,top:viewTop,live:viewLive,livepred:viewLivePred,highodds:viewHighOdds,cscore:viewCScore})[tab]();
+  ({today:viewToday,stats:viewStats,top:viewTop,live:viewLive,livepred:viewLivePred,highodds:viewHighOdds,cscore:viewCScore,gameslist:viewGamesList})[tab]();
 }
 render();
 loadLive().catch(()=>{});
